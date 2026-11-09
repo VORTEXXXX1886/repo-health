@@ -4,6 +4,17 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Iterable
+
+
+CHECK_NAMES = (
+    "License",
+    "Contributing guide",
+    "Code of conduct",
+    "Security policy",
+    "GitHub Actions workflows",
+    "Dependency updates",
+)
 
 
 @dataclass(frozen=True)
@@ -18,7 +29,6 @@ class Finding:
 
 
 def _find_case_insensitive(root: Path, candidate: str) -> Path | None:
-    """Find a path beneath root, matching each path segment without case sensitivity."""
     current = root
 
     for segment in Path(candidate).parts:
@@ -49,7 +59,29 @@ def _has_any_file(root: Path, candidates: tuple[str, ...]) -> bool:
     )
 
 
-def check_repository(root: Path) -> list[Finding]:
+def _filter_checks(
+    checks: Iterable[tuple[str, tuple[str, ...], str]],
+    include: Iterable[str] | None = None,
+    exclude: Iterable[str] | None = None,
+) -> list[tuple[str, tuple[str, ...], str]]:
+    include_set = set(include) if include else None
+    exclude_set = set(exclude) if exclude else None
+
+    filtered: list[tuple[str, tuple[str, ...], str]] = []
+    for name, paths, suggestion in checks:
+        if include_set is not None and name not in include_set:
+            continue
+        if exclude_set is not None and name in exclude_set:
+            continue
+        filtered.append((name, paths, suggestion))
+    return filtered
+
+
+def check_repository(
+    root: Path,
+    include: Iterable[str] | None = None,
+    exclude: Iterable[str] | None = None,
+) -> list[Finding]:
     """Return checks for common project metadata files beneath ``root``."""
     checks = [
         (
@@ -74,53 +106,62 @@ def check_repository(root: Path) -> list[Finding]:
         ),
     ]
 
-    findings = []
-    for name, paths, suggestion in checks:
-        passed = _has_any_file(root, paths)
+    all_checks = [
+        *checks,
+        (
+            "GitHub Actions workflows",
+            (),
+            "Add a workflow under .github/workflows/ to automate tests or other project tasks.",
+        ),
+        (
+            "Dependency updates",
+            (),
+            "Add .github/dependabot.yml to configure automated dependency update proposals.",
+        ),
+    ]
+
+    filtered_checks = _filter_checks(all_checks, include=include, exclude=exclude)
+
+    findings: list[Finding] = []
+    for name, paths, suggestion in filtered_checks:
+        if name in {"GitHub Actions workflows", "Dependency updates"}:
+            if name == "GitHub Actions workflows":
+                workflows_dir = _find_case_insensitive(root, ".github/workflows")
+                passed = (
+                    workflows_dir is not None
+                    and workflows_dir.is_dir()
+                    and any(
+                        child.is_file() and child.suffix.casefold() in {".yml", ".yaml"}
+                        for child in workflows_dir.iterdir()
+                    )
+                )
+                expected = ".github/workflows/*.yml or .yaml"
+                message = (
+                    "Found at least one workflow."
+                    if passed
+                    else "Add a workflow under .github/workflows/ to automate tests or other project tasks."
+                )
+            else:
+                dependabot_paths = (".github/dependabot.yml", ".github/dependabot.yaml")
+                passed = _has_any_file(root, dependabot_paths)
+                expected = " or ".join(dependabot_paths)
+                message = (
+                    "Found Dependabot configuration."
+                    if passed
+                    else "Add .github/dependabot.yml to configure automated dependency update proposals."
+                )
+        else:
+            passed = _has_any_file(root, paths)
+            expected = " or ".join(paths)
+            message = "Found an expected file." if passed else suggestion
+
         findings.append(
             Finding(
                 name=name,
                 passed=passed,
-                message="Found an expected file." if passed else suggestion,
-                expected=" or ".join(paths),
+                message=message,
+                expected=expected,
             )
         )
-
-    workflows_dir = _find_case_insensitive(root, ".github/workflows")
-    has_workflows = (
-        workflows_dir is not None
-        and workflows_dir.is_dir()
-        and any(
-            child.is_file() and child.suffix.casefold() in {".yml", ".yaml"}
-            for child in workflows_dir.iterdir()
-        )
-    )
-    findings.append(
-        Finding(
-            name="GitHub Actions workflows",
-            passed=has_workflows,
-            message=(
-                "Found at least one workflow."
-                if has_workflows
-                else "Add a workflow under .github/workflows/ to automate tests or other project tasks."
-            ),
-            expected=".github/workflows/*.yml or .yaml",
-        )
-    )
-
-    dependabot_paths = (".github/dependabot.yml", ".github/dependabot.yaml")
-    has_dependabot = _has_any_file(root, dependabot_paths)
-    findings.append(
-        Finding(
-            name="Dependency updates",
-            passed=has_dependabot,
-            message=(
-                "Found Dependabot configuration."
-                if has_dependabot
-                else "Add .github/dependabot.yml to configure automated dependency update proposals."
-            ),
-            expected=" or ".join(dependabot_paths),
-        )
-    )
 
     return findings
