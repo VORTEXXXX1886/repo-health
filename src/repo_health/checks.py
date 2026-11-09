@@ -17,8 +17,31 @@ class Finding:
         return asdict(self)
 
 
+def _find_case_insensitive_child(parent: Path, name: str) -> Path | None:
+    """Return a child path whose name matches ``name`` ignoring case."""
+    if not parent.exists():
+        return None
+    for child in parent.iterdir():
+        if child.name.lower() == name.lower():
+            return child
+    return None
+
+
 def _has_any_file(root: Path, candidates: tuple[str, ...]) -> bool:
-    return any((root / candidate).is_file() for candidate in candidates)
+    """Check whether any candidate relative path exists, ignoring filename case."""
+    for candidate in candidates:
+        path = Path(candidate)
+        current = root
+        matches = True
+        for part in path.parts:
+            next_path = _find_case_insensitive_child(current, part)
+            if next_path is None:
+                matches = False
+                break
+            current = next_path
+        if matches and current.is_file():
+            return True
+    return False
 
 
 def check_repository(root: Path) -> list[Finding]:
@@ -39,8 +62,9 @@ def check_repository(root: Path) -> list[Finding]:
         for name, paths, suggestion in checks
     ]
 
-    workflows_dir = root / ".github" / "workflows"
-    has_workflows = workflows_dir.is_dir() and any(
+    github_dir = _find_case_insensitive_child(root, ".github")
+    workflows_dir = None if github_dir is None else _find_case_insensitive_child(github_dir, "workflows")
+    has_workflows = workflows_dir is not None and workflows_dir.is_dir() and any(
         child.is_file() and child.suffix.lower() in {".yml", ".yaml"}
         for child in workflows_dir.iterdir()
     )
