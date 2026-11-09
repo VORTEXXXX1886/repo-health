@@ -39,6 +39,17 @@ class CheckRepositoryTests(unittest.TestCase):
         self.assertTrue(findings["GitHub Actions workflows"].passed)
         self.assertFalse(findings["Code of conduct"].passed)
 
+    def test_can_filter_checks(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "LICENSE").write_text("x")
+
+            findings = check_repository(root, include=("License",))
+            self.assertEqual([f.name for f in findings], ["License"])
+
+            findings = check_repository(root, exclude=("License",))
+            self.assertNotIn("License", {f.name for f in findings})
+
     def test_cli_json_output_and_failure_status(self):
         with tempfile.TemporaryDirectory() as directory, patch("sys.stdout") as stdout:
             status = main([directory, "--format", "json"])
