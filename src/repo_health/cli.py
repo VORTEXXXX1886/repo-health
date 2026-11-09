@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import Sequence
 
-from repo_health.checks import Finding, check_repository
+from repo_health.checks import CHECK_NAMES, Finding, check_repository
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -34,6 +34,18 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="exit successfully even when checks find missing files",
     )
+    parser.add_argument(
+        "--check",
+        action="append",
+        choices=CHECK_NAMES,
+        help="run only the named check(s); can be passed multiple times",
+    )
+    parser.add_argument(
+        "--skip",
+        action="append",
+        choices=CHECK_NAMES,
+        help="skip named check(s); can be passed multiple times",
+    )
     return parser
 
 
@@ -56,7 +68,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     if not path.is_dir():
         parser.error(f"path is not a directory: {path}")
 
-    findings = check_repository(path)
+    findings = check_repository(
+        path,
+        include=args.check,
+        exclude=args.skip,
+    )
+
     if args.format == "json":
         print(
             json.dumps(
