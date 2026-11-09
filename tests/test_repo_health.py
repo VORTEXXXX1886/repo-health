@@ -20,12 +20,13 @@ class CheckRepositoryTests(unittest.TestCase):
     def test_recognizes_supported_file_locations(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            (root / ".github").mkdir()
-            (root / ".github" / "CONTRIBUTING.md").write_text("How to contribute")
-            (root / ".github" / "SECURITY.md").write_text("Report vulnerabilities")
-            (root / "LICENSE.txt").write_text("License text")
-            (root / ".github" / "dependabot.yaml").write_text("version: 2")
-            workflows = root / ".github" / "workflows"
+            github = root / ".GITHUB"
+            github.mkdir()
+            (github / "CONTRIBUTING.MD").write_text("How to contribute")
+            (github / "SECURITY.MD").write_text("Report vulnerabilities")
+            (root / "LICENSE.TXT").write_text("License text")
+            (github / "Dependabot.YAML").write_text("version: 2")
+            workflows = github / "WORKFLOWS"
             workflows.mkdir()
             (workflows / "tests.YAML").write_text("name: tests")
 
