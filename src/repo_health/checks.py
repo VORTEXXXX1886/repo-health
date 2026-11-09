@@ -17,40 +17,50 @@ class Finding:
         return asdict(self)
 
 
-def _find_case_insensitive_child(parent: Path, name: str) -> Path | None:
-    """Return a child path whose name matches ``name`` ignoring case."""
-    if not parent.exists():
-        return None
-    for child in parent.iterdir():
-        if child.name.lower() == name.lower():
-            return child
-    return None
+def _candidate_exists_case_insensitive(root: Path, candidate: str) -> bool:
+    current = root
+    for segment in Path(candidate).parts:
+        try:
+            matches = [
+                child for child in current.iterdir() if child.name.lower() == segment.lower()
+            ]
+        except (NotADirectoryError, FileNotFoundError):
+            return False
+
+        if not matches:
+            return False
+        current = matches[0]
+
+    return current.is_file()
 
 
 def _has_any_file(root: Path, candidates: tuple[str, ...]) -> bool:
-    """Check whether any candidate relative path exists, ignoring filename case."""
-    for candidate in candidates:
-        path = Path(candidate)
-        current = root
-        matches = True
-        for part in path.parts:
-            next_path = _find_case_insensitive_child(current, part)
-            if next_path is None:
-                matches = False
-                break
-            current = next_path
-        if matches and current.is_file():
-            return True
-    return False
+    return any(_candidate_exists_case_insensitive(root, candidate) for candidate in candidates)
 
 
 def check_repository(root: Path) -> list[Finding]:
     """Return checks for common project metadata files beneath ``root``."""
     checks = [
-        ("License", ("LICENSE", "LICENSE.md", "LICENSE.txt", "COPYING"), "Add a LICENSE file that explains how others may use your project."),
-        ("Contributing guide", ("CONTRIBUTING.md", ".github/CONTRIBUTING.md"), "Add CONTRIBUTING.md with setup, testing, and contribution instructions."),
-        ("Code of conduct", ("CODE_OF_CONDUCT.md", ".github/CODE_OF_CONDUCT.md"), "Add a code of conduct to set expectations for community participation."),
-        ("Security policy", ("SECURITY.md", ".github/SECURITY.md"), "Add SECURITY.md with instructions for reporting vulnerabilities."),
+        (
+            "License",
+            ("LICENSE", "LICENSE.md", "LICENSE.txt", "COPYING"),
+            "Add a LICENSE file that explains how others may use your project.",
+        ),
+        (
+            "Contributing guide",
+            ("CONTRIBUTING.md", ".github/CONTRIBUTING.md"),
+            "Add CONTRIBUTING.md with setup, testing, and contribution instructions.",
+        ),
+        (
+            "Code of conduct",
+            ("CODE_OF_CONDUCT.md", ".github/CODE_OF_CONDUCT.md"),
+            "Add a code of conduct to set expectations for community participation.",
+        ),
+        (
+            "Security policy",
+            ("SECURITY.md", ".github/SECURITY.md"),
+            "Add SECURITY.md with instructions for reporting vulnerabilities.",
+        ),
     ]
     findings = [
         Finding(
@@ -62,9 +72,8 @@ def check_repository(root: Path) -> list[Finding]:
         for name, paths, suggestion in checks
     ]
 
-    github_dir = _find_case_insensitive_child(root, ".github")
-    workflows_dir = None if github_dir is None else _find_case_insensitive_child(github_dir, "workflows")
-    has_workflows = workflows_dir is not None and workflows_dir.is_dir() and any(
+    workflows_dir = root / ".github" / "workflows"
+    has_workflows = workflows_dir.is_dir() and any(
         child.is_file() and child.suffix.lower() in {".yml", ".yaml"}
         for child in workflows_dir.iterdir()
     )
